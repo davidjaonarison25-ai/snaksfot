@@ -35,6 +35,24 @@
       text-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
     }
 
+    #leaderboard {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(13, 15, 24, 0.7);
+      border: 1px solid rgba(0, 255, 204, 0.3);
+      padding: 10px 15px;
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+    }
+
+    #leaderboard h3 {
+      color: #00ffcc;
+      margin-bottom: 5px;
+      font-size: 14px;
+    }
+
     #instructions {
       color: #888888;
       font-size: 14px;
@@ -53,14 +71,19 @@
     <div id="instructions">Maintenir Clic Gauche = Boost</div>
   </div>
 
+  <div id="leaderboard">
+    <h3>Classement</h3>
+    <ol id="leaderList"></ol>
+  </div>
+
   <canvas id="gameCanvas"></canvas>
 
   <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreElement = document.getElementById('scoreVal');
+    const leaderList = document.getElementById('leaderList');
 
-    // Adapt window size
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
@@ -73,18 +96,52 @@
     let isBoosting = false;
     let score = 0;
 
-    // Serpent
-    let snake = {
+    // Serpent Joueur
+    let player = {
+      name: "Vous",
       body: [{ x: canvas.width / 2, y: canvas.height / 2 }],
       radius: 12,
       baseSpeed: 4,
       boostSpeed: 8,
-      length: 15
+      length: 15,
+      color: '#00ffcc',
+      headColor: '#ffffff',
+      score: 0,
+      isBot: false
     };
+
+    // Liste des Bots
+    let bots = [];
+    const botNames = ["Neo", "Viper", "Shadow", "Alpha", "Blaze", "Titan"];
+    const botColors = ['#ff0055', '#ff9900', '#bb00ff', '#0099ff', '#ffff00', '#00ff55'];
+
+    function createBot(name, color) {
+      let startX = Math.random() * canvas.width;
+      let startY = Math.random() * canvas.height;
+      let bot = {
+        name: name,
+        body: [{ x: startX, y: startY }],
+        radius: 12,
+        baseSpeed: 3.5,
+        length: 15,
+        color: color,
+        score: 0,
+        isBot: true,
+        target: { x: Math.random() * canvas.width, y: Math.random() * canvas.height }
+      };
+      for(let i = 0; i < bot.length; i++) {
+        bot.body.push({ x: startX, y: startY });
+      }
+      return bot;
+    }
+
+    botNames.forEach((name, i) => {
+      bots.push(createBot(name, botColors[i % botColors.length]));
+    });
 
     // Orbes
     let foods = [];
-    const numFoods = 70;
+    const numFoods = 80;
 
     function createFood() {
       return {
@@ -99,56 +156,81 @@
       foods.push(createFood());
     }
 
-    // Controles
+    // Contrôles
     window.addEventListener('mousemove', (e) => {
       mouse.x = e.clientX;
       mouse.y = e.clientY;
     });
 
-    window.addEventListener('mousedown', (e) => {
-      if (e.button === 0) isBoosting = true;
-    });
+    window.addEventListener('mousedown', (e) => { if (e.button === 0) isBoosting = true; });
+    window.addEventListener('mouseup', (e) => { if (e.button === 0) isBoosting = false; });
 
-    window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) isBoosting = false;
-    });
+    function updateSnake(s, targetX, targetY, boosting) {
+      let head = s.body[0];
+      let speed = s.baseSpeed;
 
-    // Game loop logic
-    function update() {
-      let head = snake.body[0];
-
-      let currentSpeed = snake.baseSpeed;
-      if (isBoosting && snake.length > 8) {
-        currentSpeed = snake.boostSpeed;
-        snake.length -= 0.15;
-        score = Math.max(0, Math.floor(score - 0.5));
-        scoreElement.innerText = score;
+      if (boosting && s.length > 8) {
+        speed = s.boostSpeed || 7;
+        s.length -= 0.1;
+        s.score = Math.max(0, Math.floor(s.score - 0.2));
+        if(!s.isBot) scoreElement.innerText = Math.floor(s.score);
       }
 
-      let dx = mouse.x - head.x;
-      let dy = mouse.y - head.y;
+      let dx = targetX - head.x;
+      let dy = targetY - head.y;
       let distance = Math.hypot(dx, dy);
 
       if (distance > 5) {
         let newHead = {
-          x: head.x + (dx / distance) * currentSpeed,
-          y: head.y + (dy / distance) * currentSpeed
+          x: head.x + (dx / distance) * speed,
+          y: head.y + (dy / distance) * speed
         };
-        snake.body.unshift(newHead);
+        s.body.unshift(newHead);
 
-        while (snake.body.length > Math.floor(snake.length)) {
-          snake.body.pop();
+        while (s.body.length > Math.floor(s.length)) {
+          s.body.pop();
         }
       }
 
+      // Manger nourriture
       foods.forEach((food, index) => {
-        let distToFood = Math.hypot(head.x - food.x, head.y - food.y);
-        if (distToFood < snake.radius + food.radius) {
+        let dist = Math.hypot(head.x - food.x, head.y - food.y);
+        if (dist < s.radius + food.radius) {
           foods[index] = createFood();
-          snake.length += 3;
-          score += 10;
-          scoreElement.innerText = score;
+          s.length += 3;
+          s.score += 10;
+          if(!s.isBot) scoreElement.innerText = Math.floor(s.score);
         }
+      });
+    }
+
+    function update() {
+      // Mettre à jour le joueur
+      updateSnake(player, mouse.x, mouse.y, isBoosting);
+
+      // Mettre à jour les Bots
+      bots.forEach((bot) => {
+        // Chercher l'orbe la plus proche
+        let closest = foods[0];
+        let minDist = 9999;
+        foods.forEach(f => {
+          let d = Math.hypot(bot.body[0].x - f.x, bot.body[0].y - f.y);
+          if(d < minDist) { minDist = d; closest = f; }
+        });
+
+        updateSnake(bot, closest.x, closest.y, false);
+      });
+
+      // Mettre à jour le classement
+      let allSnakes = [player, ...bots];
+      allSnakes.sort((a, b) => b.score - a.score);
+      
+      leaderList.innerHTML = "";
+      allSnakes.slice(0, 5).forEach(s => {
+        let li = document.createElement('li');
+        li.innerText = `${s.name}: ${Math.floor(s.score)}`;
+        li.style.color = s.color;
+        leaderList.appendChild(li);
       });
     }
 
@@ -156,34 +238,31 @@
       ctx.fillStyle = '#0d0f18';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+      // Dessiner la nourriture
       foods.forEach((food) => {
         ctx.beginPath();
         ctx.arc(food.x, food.y, food.radius, 0, Math.PI * 2);
         ctx.fillStyle = food.color;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 8;
         ctx.shadowColor = food.color;
         ctx.fill();
         ctx.closePath();
       });
 
-      for (let i = snake.body.length - 1; i >= 0; i--) {
-        let segment = snake.body[i];
-        ctx.beginPath();
-        ctx.arc(segment.x, segment.y, snake.radius, 0, Math.PI * 2);
-
-        if (isBoosting) {
-          ctx.fillStyle = i === 0 ? '#ff0055' : '#ff5500';
-          ctx.shadowBlur = 20;
-          ctx.shadowColor = '#ff0055';
-        } else {
-          ctx.fillStyle = i === 0 ? '#00ffcc' : '#00b386';
-          ctx.shadowBlur = i === 0 ? 15 : 0;
-          ctx.shadowColor = '#00ffcc';
+      // Dessiner tous les serpents
+      let allSnakes = [player, ...bots];
+      allSnakes.forEach(s => {
+        for (let i = s.body.length - 1; i >= 0; i--) {
+          let segment = s.body[i];
+          ctx.beginPath();
+          ctx.arc(segment.x, segment.y, s.radius, 0, Math.PI * 2);
+          ctx.fillStyle = (i === 0 && s.headColor) ? s.headColor : s.color;
+          ctx.shadowBlur = i === 0 ? 10 : 0;
+          ctx.shadowColor = s.color;
+          ctx.fill();
+          ctx.closePath();
         }
-
-        ctx.fill();
-        ctx.closePath();
-      }
+      });
 
       ctx.shadowBlur = 0;
     }
