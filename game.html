@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake.io Game</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #0d0f18;
+      font-family: 'Arial', sans-serif;
+      user-select: none;
+    }
+
+    #ui {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #score {
+      color: #00ffcc;
+      font-size: 24px;
+      font-weight: bold;
+      text-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
+    }
+
+    #instructions {
+      color: #888888;
+      font-size: 14px;
+      margin-top: 5px;
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="ui">
+    <div id="score">Score : <span id="scoreVal">0</span></div>
+    <div id="instructions">Maintenir Clic Gauche = Boost</div>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreElement = document.getElementById('scoreVal');
+
+    // Adapt window size
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+
+    let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+    let isBoosting = false;
+    let score = 0;
+
+    // Serpent
+    let snake = {
+      body: [{ x: canvas.width / 2, y: canvas.height / 2 }],
+      radius: 12,
+      baseSpeed: 4,
+      boostSpeed: 8,
+      length: 15
+    };
+
+    // Orbes
+    let foods = [];
+    const numFoods = 70;
+
+    function createFood() {
+      return {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        radius: Math.random() * 4 + 3,
+        color: `hsl(${Math.random() * 360}, 100%, 60%)`
+      };
+    }
+
+    for (let i = 0; i < numFoods; i++) {
+      foods.push(createFood());
+    }
+
+    // Controles
+    window.addEventListener('mousemove', (e) => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+    });
+
+    window.addEventListener('mousedown', (e) => {
+      if (e.button === 0) isBoosting = true;
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) isBoosting = false;
+    });
+
+    // Game loop logic
+    function update() {
+      let head = snake.body[0];
+
+      let currentSpeed = snake.baseSpeed;
+      if (isBoosting && snake.length > 8) {
+        currentSpeed = snake.boostSpeed;
+        snake.length -= 0.15;
+        score = Math.max(0, Math.floor(score - 0.5));
+        scoreElement.innerText = score;
+      }
+
+      let dx = mouse.x - head.x;
+      let dy = mouse.y - head.y;
+      let distance = Math.hypot(dx, dy);
+
+      if (distance > 5) {
+        let newHead = {
+          x: head.x + (dx / distance) * currentSpeed,
+          y: head.y + (dy / distance) * currentSpeed
+        };
+        snake.body.unshift(newHead);
+
+        while (snake.body.length > Math.floor(snake.length)) {
+          snake.body.pop();
+        }
+      }
+
+      foods.forEach((food, index) => {
+        let distToFood = Math.hypot(head.x - food.x, head.y - food.y);
+        if (distToFood < snake.radius + food.radius) {
+          foods[index] = createFood();
+          snake.length += 3;
+          score += 10;
+          scoreElement.innerText = score;
+        }
+      });
+    }
+
+    function draw() {
+      ctx.fillStyle = '#0d0f18';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      foods.forEach((food) => {
+        ctx.beginPath();
+        ctx.arc(food.x, food.y, food.radius, 0, Math.PI * 2);
+        ctx.fillStyle = food.color;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = food.color;
+        ctx.fill();
+        ctx.closePath();
+      });
+
+      for (let i = snake.body.length - 1; i >= 0; i--) {
+        let segment = snake.body[i];
+        ctx.beginPath();
+        ctx.arc(segment.x, segment.y, snake.radius, 0, Math.PI * 2);
+
+        if (isBoosting) {
+          ctx.fillStyle = i === 0 ? '#ff0055' : '#ff5500';
+          ctx.shadowBlur = 20;
+          ctx.shadowColor = '#ff0055';
+        } else {
+          ctx.fillStyle = i === 0 ? '#00ffcc' : '#00b386';
+          ctx.shadowBlur = i === 0 ? 15 : 0;
+          ctx.shadowColor = '#00ffcc';
+        }
+
+        ctx.fill();
+        ctx.closePath();
+      }
+
+      ctx.shadowBlur = 0;
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
